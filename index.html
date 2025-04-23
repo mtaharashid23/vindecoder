@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EpicVINReport - Full Vehicle Report</title>
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/32.png"
+        type="image/png">
+    <link rel="shortcut icon"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/32.png" type="image/png">
+    <link rel="apple-touch-icon" sizes="32x32"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/32.png">
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/64.png"
+        type="image/png" sizes="64x64">
+    <link rel="apple-touch-icon" sizes="64x64"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/64.png">
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/128.png"
+        type="image/png" sizes="128x128">
+    <link rel="apple-touch-icon" sizes="128x128"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/128.png">
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/152.png"
+        type="image/png" sizes="152x152">
+    <link rel="apple-touch-icon" sizes="152x152"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/152.png">
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/167.png"
+        type="image/png" sizes="167x167">
+    <link rel="apple-touch-icon" sizes="167x167"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/167.png">
+    <link rel="icon" href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/180.png"
+        type="image/png" sizes="180x180">
+    <link rel="apple-touch-icon" sizes="180x180"
+        href="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/favicon/180.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center px-4">
+    <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-5xl">
+        <div class="flex items-center justify-center mb-6">
+            <img src="https://epicvinreport.com/wp-content/themes/epicvinreport/assets/images/epicvinreport.png"
+                alt="EpicVIN Logo" class="h-10 mr-3" />
+        </div>
+
+        <input type="text" id="vinInput" placeholder="Enter VIN"
+            class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4 text-sm">
+
+        <button onclick="lookupVIN()"
+            class="w-full bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition">
+            Generate Report
+        </button>
+
+        <button id="downloadBtn" onclick="downloadPDF()"
+            class="w-full mt-3 bg-black text-white py-2 rounded-lg font-semibold hover:bg-gray-900 transition hidden">
+            Download PDF
+        </button>
+
+        <div id="output"
+            class="bg-white mt-6 p-6 rounded-xl border border-gray-200 text-base text-gray-800 space-y-6 shadow-sm hidden">
+            Vehicle details will appear here...
+        </div>
+    </div>
+
+    <script>
+        let resultData = {};
+        let fullOutputText = '';
+
+        async function lookupVIN() {
+            const vin = document.getElementById('vinInput').value.trim();
+            const output = document.getElementById('output');
+            const downloadBtn = document.getElementById('downloadBtn');
+            output.classList.remove('hidden');
+            downloadBtn.classList.add('hidden');
+
+            if (!vin) {
+                output.innerHTML = '<div class="text-red-600 font-medium">❗ Please enter a VIN.</div>';
+                return;
+            }
+
+            output.innerHTML = '<div class="text-blue-600">⏳ Fetching data...</div>';
+
+            try {
+                const wmi = vin.slice(0, 3);
+                const responses = await Promise.all([
+                    fetch(
+                        `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${vin}?format=json`
+                    ),
+                    fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeWMI/${wmi}?format=json`),
+                    fetch(
+                        `https://vpic.nhtsa.dot.gov/api/vehicles/GetWMIsForManufacturer/${wmi}?format=json`
+                    ),
+                    fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetAllMakes?format=json`),
+                    fetch(
+                        `https://vpic.nhtsa.dot.gov/api/vehicles/GetVehicleTypesForMake/${wmi}?format=json`)
+                ]);
+
+                const [decodeData, wmiData, wmiForMan, makesData, vehicleTypeData] = await Promise.all(responses
+                    .map(res => res.json()));
+
+                let html = '';
+                fullOutputText = `EpicVIN Full Report\n\nVIN: ${vin}\n\n`;
+
+                html += '<h2 class="text-2xl font-bold text-blue-800 mb-4 border-b pb-2">Vehicle Information</h2>';
+                html += '<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-2">';
+                const vehicle = decodeData.Results[0];
+                for (const [key, value] of Object.entries(vehicle)) {
+                    if (value && value !== '0' && value !== 'Not Applicable') {
+                        html += `<div><span class="font-semibold text-gray-700">${key}:</span> ${value}</div>`;
+                        fullOutputText += `${key}: ${value}\n`;
+                    }
+                }
+                html += '</div>';
+
+                html += '<h2 class="text-2xl font-bold text-blue-800 mt-8 mb-4 border-b pb-2">WMI Information</h2>';
+                html += '<div class="space-y-1">';
+                wmiData.Results.forEach(wmi => {
+                    html +=
+                        `<div><span class="font-semibold text-gray-700">Manufacturer:</span> ${wmi.ManufacturerName} - ${wmi.Country || 'N/A'}</div>`;
+                    fullOutputText += `Manufacturer: ${wmi.ManufacturerName} (${wmi.Country || 'N/A'})\n`;
+                });
+                html += '</div>';
+
+                html += '<h2 class="text-2xl font-bold text-blue-800 mt-8 mb-4 border-b pb-2">Vehicle Types</h2>';
+                html += '<div class="space-y-1">';
+                if (vehicleTypeData.Results.length) {
+                    vehicleTypeData.Results.forEach(type => {
+                        html +=
+                            `<div><span class="font-semibold text-gray-700">Type:</span> ${type.VehicleTypeName}</div>`;
+                        fullOutputText += `Vehicle Type: ${type.VehicleTypeName}\n`;
+                    });
+                } else {
+                    html += '<div>No vehicle type information found for this VIN.</div>';
+                    fullOutputText += 'Vehicle Type: Not Available\n';
+                }
+                html += '</div>';
+
+                output.innerHTML = html;
+                downloadBtn.classList.remove('hidden');
+            } catch (err) {
+                output.innerHTML = '<div class="text-red-600">❌ Failed to fetch data.</div>';
+            }
+        }
+
+        function downloadPDF() {
+            const {
+                jsPDF
+            } = window.jspdf;
+            const doc = new jsPDF();
+            const lines = fullOutputText.split('\n');
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+
+            let y = 15;
+            lines.forEach(line => {
+                doc.text(line, 10, y);
+                y += 7;
+                if (y > 280) {
+                    doc.addPage();
+                    y = 15;
+                }
+            });
+
+            doc.save(`EpicVIN_Report_${document.getElementById('vinInput').value}.pdf`);
+        }
+    </script>
+</body>
+
+</html>
